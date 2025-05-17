@@ -4,31 +4,42 @@ export async function POST(request: Request) {
   try {
     const { messages } = await request.json();
 
-    // Combine messages into a single prompt for Anthropic
-    const userMessage = messages
-      .map((m: { role: string; content: string }) => `${m.role === "user" ? "Human" : "Assistant"}: ${m.content}`)
-      .join("\n") + "\nAssistant:";
-
-    const response = await fetch("https://api.anthropic.com/v1/complete", {
+    // Use the current API endpoint
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-api-key": process.env.ANTHROPIC_API_KEY!,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-opus-20240229", // or another Claude model if you prefer
-        prompt: userMessage,
-        max_tokens_to_sample: 1024,
+        model: "claude-3-opus-20240229",
+        messages: messages.map((m: { role: string; content: string }) => ({
+          role: m.role === "user" ? "user" : "assistant",
+          content: m.content
+        })),
+        max_tokens: 1024,
         temperature: 0.7
       }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Anthropic API error:", errorData);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `API Error: ${response.status} - ${JSON.stringify(errorData)}`,
+        },
+        { status: response.status }
+      );
+    }
 
     const data = await response.json();
 
     return NextResponse.json({
       success: true,
-      response: data.completion,
+      response: data.content[0].text,
     });
   } catch (error) {
     console.error("Error in chat API:", error);

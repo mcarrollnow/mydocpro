@@ -27,7 +27,11 @@ export async function generateChatResponse(
 
     // Call our chat API route
     try {
-      const response = await fetch(`${process.env.VERCEL_URL || "http://localhost:3000"}/api/chat`, {
+      // Ensure absolute URL for production
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000";
+      const response = await fetch(`${baseUrl}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

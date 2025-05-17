@@ -50,7 +50,15 @@ export async function uploadDocument(formData: FormData) {
 export async function parseDocument(docId: string, fileUrl: string, type: string) {
   try {
     // Download the file from Blob Storage
-    const response = await fetch(fileUrl);
+    let fileFetchUrl = fileUrl;
+    if (fileUrl && fileUrl.startsWith("/")) {
+      // If fileUrl is a relative path, make it absolute
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000";
+      fileFetchUrl = `${baseUrl}${fileUrl}`;
+    }
+    const response = await fetch(fileFetchUrl);
     if (!response.ok) throw new Error('Failed to fetch file from Blob Storage');
     const arrayBuffer = await response.arrayBuffer();
     let content = '';

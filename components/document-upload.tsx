@@ -59,39 +59,28 @@ export default function DocumentUpload() {
           ...prev,
           [fileName]: 10,
         }))
-        const formData = new FormData()
-        formData.append("file", file)
-        progressInterval = setInterval(() => {
-          setUploadProgress((prev) => {
-            const currentProgress = prev[fileName] || 0
-            if (currentProgress < 90) {
-              return {
-                ...prev,
-                [fileName]: currentProgress + Math.floor(Math.random() * 10),
-              }
-            }
-            return prev
-          })
-        }, 300)
-        // Upload the file
-        const uploadResult = await uploadDocument(formData)
-        if (!uploadResult.success) throw new Error(uploadResult.error || "Upload failed")
+        // Upload the file to the API route
+        const response = await fetch(`/api/documents/upload?filename=${encodeURIComponent(file.name)}`, {
+          method: 'POST',
+          body: file,
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        const blob = await response.json();
+        const fileUrl = blob.url;
         // Parse the file after upload
-        const { docId, fileUrl, type, name, size } = uploadResult
-        const safeDocId = docId || ''
-        const safeFileUrl = fileUrl || ''
-        const safeType = type || 'unknown'
-        const parseResult = await parseDocument(safeDocId, safeFileUrl, safeType)
-        if (progressInterval) clearInterval(progressInterval)
+        const type = file.name.split('.').pop() || 'unknown';
+        const docId = Date.now().toString();
+        const parseResult = await parseDocument(docId, fileUrl, type);
+        if (progressInterval) clearInterval(progressInterval);
         if (parseResult.success) {
           setUploadProgress((prev) => ({ ...prev, [fileName]: 100 }))
           // Save document to localStorage
           const storedDocs = JSON.parse(localStorage.getItem('documents') || '[]')
           storedDocs.push({
             id: docId,
-            name,
+            name: file.name,
             type,
-            size,
+            size: file.size,
             uploadedAt: new Date().toLocaleString(),
             content: parseResult.content,
             fileUrl,

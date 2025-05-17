@@ -28,23 +28,7 @@ let documents: {
 const parsedContentStore: { [docId: string]: string } = {};
 
 export async function uploadDocument(formData: FormData) {
-  try {
-    const file = formData.get("file") as File;
-    if (!file) {
-      return { success: false, error: "No file provided" };
-    }
-    // Upload the file to Vercel Blob Storage
-    const blob = await put(`documents/${Date.now()}-${file.name}`, file, {
-      access: 'public',
-    });
-    const fileUrl = blob.url;
-    const docId = Date.now().toString();
-    // Only return fileUrl and docId, do not parse yet
-    return { success: true, fileUrl, docId, name: file.name, size: file.size, type: file.name.split('.').pop() || 'unknown' };
-  } catch (error) {
-    console.error("Error uploading document:", error);
-    return { success: false, error: "Failed to upload document" };
-  }
+  throw new Error('uploadDocument server action is no longer used. Use the /api/documents/upload API route instead.');
 }
 
 export async function parseDocument(docId: string, fileUrl: string, type: string) {

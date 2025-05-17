@@ -78,7 +78,10 @@ export default function DocumentUpload() {
         if (!uploadResult.success) throw new Error(uploadResult.error || "Upload failed")
         // Parse the file after upload
         const { docId, fileUrl, type, name, size } = uploadResult
-        const parseResult = await parseDocument(docId, fileUrl, type)
+        const safeDocId = docId || ''
+        const safeFileUrl = fileUrl || ''
+        const safeType = type || 'unknown'
+        const parseResult = await parseDocument(safeDocId, safeFileUrl, safeType)
         if (progressInterval) clearInterval(progressInterval)
         if (parseResult.success) {
           setUploadProgress((prev) => ({ ...prev, [fileName]: 100 }))

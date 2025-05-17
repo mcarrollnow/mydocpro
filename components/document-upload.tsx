@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { FileUp, File, X, Check } from 'lucide-react'
-import { uploadDocument } from "@/app/actions/document-actions"
+import { uploadDocument, parseDocument } from "@/app/actions/document-actions"
 import { useToast } from "@/components/ui/use-toast"
 
 export default function DocumentUpload() {
@@ -51,72 +51,68 @@ export default function DocumentUpload() {
 
     setUploading(true)
 
-    // Process each file
     for (const [index, file] of files.entries()) {
+      const fileName = file.name || `file-${index}`;
+      let progressInterval: NodeJS.Timeout | undefined;
       try {
-        // Update progress
         setUploadProgress((prev) => ({
           ...prev,
-          [file.name]: 10, // Start at 10%
+          [fileName]: 10,
         }))
-
-        // Create FormData
         const formData = new FormData()
         formData.append("file", file)
-
-        // Simulate progress updates
-        const progressInterval = setInterval(() => {
+        progressInterval = setInterval(() => {
           setUploadProgress((prev) => {
-            const currentProgress = prev[file.name] || 0
+            const currentProgress = prev[fileName] || 0
             if (currentProgress < 90) {
               return {
                 ...prev,
-                [file.name]: currentProgress + Math.floor(Math.random() * 10),
+                [fileName]: currentProgress + Math.floor(Math.random() * 10),
               }
             }
             return prev
           })
         }, 300)
-
         // Upload the file
-        const result = await uploadDocument(formData)
-
-        clearInterval(progressInterval)
-
-        if (result.success && result.document) {
-          setUploadProgress((prev) => ({
-            ...prev,
-            [file.name]: 100,
-          }))
-
+        const uploadResult = await uploadDocument(formData)
+        if (!uploadResult.success) throw new Error(uploadResult.error || "Upload failed")
+        // Parse the file after upload
+        const { docId, fileUrl, type, name, size } = uploadResult
+        const parseResult = await parseDocument(docId, fileUrl, type)
+        if (progressInterval) clearInterval(progressInterval)
+        if (parseResult.success) {
+          setUploadProgress((prev) => ({ ...prev, [fileName]: 100 }))
           // Save document to localStorage
           const storedDocs = JSON.parse(localStorage.getItem('documents') || '[]')
-          storedDocs.push(result.document)
+          storedDocs.push({
+            id: docId,
+            name,
+            type,
+            size,
+            uploadedAt: new Date().toLocaleString(),
+            content: parseResult.content,
+            fileUrl,
+          })
           localStorage.setItem('documents', JSON.stringify(storedDocs))
-
           toast({
-            title: "Document uploaded",
-            description: `${file.name} has been processed successfully.`,
+            title: "Document uploaded & parsed",
+            description: `${fileName} has been processed successfully.`,
           })
         } else {
-          throw new Error(result.error || "Upload failed")
+          setUploadProgress((prev) => ({ ...prev, [fileName]: -1 }))
+          throw new Error(parseResult.error || "Parsing failed")
         }
       } catch (error) {
-        console.error(`Error uploading ${file.name}:`, error)
+        if (progressInterval) clearInterval(progressInterval)
+        console.error(`Error uploading/parsing ${fileName}:`, error)
         toast({
           title: "Upload failed",
-          description: `Failed to upload ${file.name}. Please try again.`,
+          description: `Failed to upload/parse ${fileName}. Please try again.`,
           variant: "destructive",
         })
-
-        setUploadProgress((prev) => ({
-          ...prev,
-          [file.name]: -1, // Use -1 to indicate error
-        }))
+        setUploadProgress((prev) => ({ ...prev, [fileName]: -1 }))
       }
     }
-
-    // Check if all files are processed
     setTimeout(() => {
       const allDone = Object.values(uploadProgress).every((p) => p === 100 || p === -1)
       if (allDone) {
@@ -155,6 +151,7 @@ export default function DocumentUpload() {
           className="hidden"
           onChange={handleFileChange}
           accept=".pdf,.docx,.txt,.md"
+          title="Upload one or more files"
         />
       </div>
 

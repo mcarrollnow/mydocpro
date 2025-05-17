@@ -1,10 +1,10 @@
 "use server"
-import pdfParse from 'pdf-parse';
+import { PDFDocument } from 'pdf-lib';
 import mammoth from 'mammoth';
 import Papa from 'papaparse';
 import { marked } from 'marked';
 import { revalidatePath } from "next/cache"
-import { put } from '@vercel/blob'
+import { put, del } from '@vercel/blob'
 
 // Temporary module declarations for missing types
 // @ts-ignore
@@ -24,74 +24,95 @@ let documents: {
   fileUrl: string
 }[] = []
 
+// In-memory temporary store for parsed content
+const parsedContentStore: { [docId: string]: string } = {};
+
 export async function uploadDocument(formData: FormData) {
   try {
-    const file = formData.get("file") as File
-
+    const file = formData.get("file") as File;
     if (!file) {
-      return { success: false, error: "No file provided" }
+      return { success: false, error: "No file provided" };
     }
-
     // Upload the file to Vercel Blob Storage
     const blob = await put(`documents/${Date.now()}-${file.name}`, file, {
-      access: 'public', // or 'private' if you want to restrict access
-    })
-    const fileUrl = blob.url
-
-    // Extract text from the file
-    const fileContent = await extractTextFromFile(file)
-
-    // Generate embedding using our API route
-    let embedding
-    try {
-      const response = await fetch(`${process.env.VERCEL_URL || "http://localhost:3000"}/api/embedding`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text: fileContent }),
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        embedding = result.embedding
-      }
-    } catch (error) {
-      console.error("Error calling embedding API:", error)
-      // Continue without embedding if API call fails
-    }
-
-    // Store document metadata and content
-    const newDocument = {
-      id: Date.now().toString(),
-      name: file.name,
-      type: file.name.split(".").pop() || "unknown",
-      size: formatFileSize(file.size),
-      uploadedAt: "Just now",
-      content: fileContent,
-      embedding,
-      fileUrl, // Save the blob URL
-    }
-
-    documents.push(newDocument)
-
-    revalidatePath("/")
-    // Return the document so the client can save it to localStorage
-    return { success: true, document: newDocument }
+      access: 'public',
+    });
+    const fileUrl = blob.url;
+    const docId = Date.now().toString();
+    // Only return fileUrl and docId, do not parse yet
+    return { success: true, fileUrl, docId, name: file.name, size: file.size, type: file.name.split('.').pop() || 'unknown' };
   } catch (error) {
-    console.error("Error uploading document:", error)
-    return { success: false, error: "Failed to upload document" }
+    console.error("Error uploading document:", error);
+    return { success: false, error: "Failed to upload document" };
   }
+}
+
+export async function parseDocument(docId: string, fileUrl: string, type: string) {
+  try {
+    // Download the file from Blob Storage
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error('Failed to fetch file from Blob Storage');
+    const arrayBuffer = await response.arrayBuffer();
+    let content = '';
+    switch (type) {
+      case 'pdf':
+        // pdf-lib does not support text extraction directly
+        content = 'PDF text extraction is not supported with pdf-lib. Please use a different library for extracting text from PDFs.';
+        break;
+      case 'docx':
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        content = result.value;
+        break;
+      case 'rtf':
+        content = 'RTF parsing not implemented.';
+        break;
+      case 'csv':
+        const csvText = new TextDecoder().decode(arrayBuffer);
+        const csvResult = Papa.parse(csvText, { header: true });
+        content = (csvResult.data as Record<string, string>[])
+          .map((row: Record<string, string>) => Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(', '))
+          .join('\n');
+        break;
+      case 'md':
+        const mdText = new TextDecoder().decode(arrayBuffer);
+        const htmlContent = marked(mdText);
+        content = (typeof htmlContent === 'string' ? htmlContent : '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        break;
+      case 'txt':
+        content = new TextDecoder().decode(arrayBuffer);
+        break;
+      default:
+        content = new TextDecoder().decode(arrayBuffer);
+    }
+    parsedContentStore[docId] = content;
+    return { success: true, content };
+  } catch (error) {
+    console.error('Error parsing document:', error);
+    return { success: false, error: 'Failed to parse document' };
+  }
+}
+
+export async function deleteDocument(docId: string, fileUrl: string) {
+  try {
+    // Delete from Blob Storage
+    const url = new URL(fileUrl);
+    const key = url.pathname.replace(/^\//, '');
+    await del(key);
+    // Remove parsed content
+    delete parsedContentStore[docId];
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    return { success: false, error: 'Failed to delete document' };
+  }
+}
+
+export function getParsedContent(docId: string) {
+  return parsedContentStore[docId] || null;
 }
 
 export async function getDocuments() {
   return { documents }
-}
-
-export async function deleteDocument(id: string) {
-  documents = documents.filter((doc) => doc.id !== id)
-  revalidatePath("/")
-  return { success: true, deletedId: id }
 }
 
 // With this new function:
@@ -104,8 +125,10 @@ async function extractTextFromFile(file: File): Promise<string> {
         // Parse PDF files
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const pdfData = await pdfParse(buffer);
-        return pdfData.text;
+        const pdfDoc = await PDFDocument.load(buffer);
+        // pdf-lib does not support text extraction directly
+        // You would need a different library for actual text extraction
+        return 'PDF text extraction is not supported with pdf-lib. Please use a different library for extracting text from PDFs.';
         
       case 'docx':
         // Parse Word documents

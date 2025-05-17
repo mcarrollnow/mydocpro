@@ -15,6 +15,7 @@ type Document = {
   uploadedAt: string
   content?: string
   embedding?: number[]
+  fileUrl?: string
 }
 
 export default function RecentDocuments() {
@@ -67,16 +68,14 @@ export default function RecentDocuments() {
     }
   }
 
-  const handleDeleteDocument = async (id: string) => {
+  const handleDeleteDocument = async (id: string, fileUrl?: string) => {
     try {
-      const result = await deleteDocument(id)
+      if (!fileUrl) throw new Error('Missing fileUrl for deletion')
+      const result = await deleteDocument(id, fileUrl)
       if (result.success) {
         const updatedDocs = documents.filter((doc) => doc.id !== id)
         setDocuments(updatedDocs)
-        
-        // Also update localStorage
         localStorage.setItem('documents', JSON.stringify(updatedDocs))
-        
         toast({
           title: "Document deleted",
           description: "The document has been removed successfully.",
@@ -153,7 +152,7 @@ export default function RecentDocuments() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     className="cursor-pointer text-red-500 focus:text-red-500"
-                    onClick={() => handleDeleteDocument(doc.id)}
+                    onClick={() => handleDeleteDocument(doc.id, doc.fileUrl)}
                   >
                     <Trash className="h-4 w-4 mr-2" />
                     Delete

@@ -8,6 +8,7 @@ export type Document = {
   uploadedAt: string
   content: string
   embedding?: number[]
+  fileUrl?: string
 }
 
 // Save a document to localStorage

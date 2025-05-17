@@ -4,6 +4,7 @@ import mammoth from 'mammoth';
 import Papa from 'papaparse';
 import { marked } from 'marked';
 import { revalidatePath } from "next/cache"
+import { put } from '@vercel/blob'
 
 // Temporary module declarations for missing types
 // @ts-ignore
@@ -20,6 +21,7 @@ let documents: {
   uploadedAt: string
   content: string
   embedding?: number[]
+  fileUrl: string
 }[] = []
 
 export async function uploadDocument(formData: FormData) {
@@ -30,9 +32,13 @@ export async function uploadDocument(formData: FormData) {
       return { success: false, error: "No file provided" }
     }
 
-    // In a real app, you would store the file in a storage service
-    // and extract the text content using a document parsing library
-    // For this demo, we'll simulate text extraction
+    // Upload the file to Vercel Blob Storage
+    const blob = await put(`documents/${Date.now()}-${file.name}`, file, {
+      access: 'public', // or 'private' if you want to restrict access
+    })
+    const fileUrl = blob.url
+
+    // Extract text from the file
     const fileContent = await extractTextFromFile(file)
 
     // Generate embedding using our API route
@@ -64,6 +70,7 @@ export async function uploadDocument(formData: FormData) {
       uploadedAt: "Just now",
       content: fileContent,
       embedding,
+      fileUrl, // Save the blob URL
     }
 
     documents.push(newDocument)

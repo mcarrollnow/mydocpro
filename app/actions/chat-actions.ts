@@ -39,6 +39,12 @@ export async function generateChatResponse(
         body: JSON.stringify({ messages, context }),
       })
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Chat API error response:", errorText);
+        throw new Error(`Chat API returned status ${response.status}`);
+      }
+
       const result = await response.json()
       if (result.success) {
         return {

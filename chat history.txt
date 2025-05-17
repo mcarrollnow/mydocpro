@@ -1,0 +1,538 @@
+
+
+Thought for some time
+To run your Next.js development server, you can use the following commands:
+
+Development Mode
+npm run dev
+or if you're using yarn:
+
+yarn dev
+or with pnpm:
+
+pnpm dev
+This will start your development server, typically on http://localhost:3000, with hot reloading enabled.
+
+Production Build and Start
+If you want to test the production build:
+
+Build the application:
+npm run build
+Start the production server:
+npm start
+Additional Options
+You can specify a different port if 3000 is already in use:
+
+npm run dev -- -p 3001
+Or to specify both host and port:
+
+npm run dev -- -H 0.0.0.0 -p 3001
+Make sure you're in the root directory of your Next.js project when running these commands.
+why did it say this to me The document you're referring to, titled "apple-privacy-policy-en-ww.pdf," appears to be a project proposal. It includes details such as budget estimates, the timeline for the project, and how resources will be allocated. However, specific content or detailed explanations from the document are not provided in your query, so if you have any specific questions about the proposal, feel free to ask!
+
+Thought for 5 seconds
+This is happening because your application is currently using simulated text extraction rather than actually parsing the PDF content.
+
+In your document-actions.ts file, there's a function called simulateTextExtraction that returns dummy placeholder content based on file type. For PDF files, it returns this generic text:
+
+`This is extracted content from a PDF file named ${file.name}. It contains information about the project proposal including budget estimates, timeline, and resource allocation.`
+So regardless of what's actually in your "apple-privacy-policy-en-ww.pdf" file, the AI is responding based on this simulated content about a "project proposal with budget estimates, timeline, and resource allocation."
+
+To fix this and make your AI respond based on the actual content of your PDFs, you would need to implement real PDF parsing. Here's how you could do that:
+
+Install a PDF parsing library:
+npm install pdf-parse
+Update your simulateTextExtraction function in document-actions.ts to actually parse the PDF:
+import pdfParse from 'pdf-parse';
+
+// Replace the simulateTextExtraction function with this:
+async function extractTextFromFile(file: File): Promise<string> {
+  const fileType = file.name.split(".").pop()?.toLowerCase();
+  
+  if (fileType === 'pdf') {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const pdfData = await pdfParse(buffer);
+      return pdfData.text;
+    } catch (error) {
+      console.error("Error parsing PDF:", error);
+      return `Failed to extract content from ${file.name}. Error: ${error}`;
+    }
+  } else if (fileType === 'docx') {
+    // For DOCX files, you would use a library like mammoth.js
+    // This is just a placeholder
+    return `This is extracted content from a Word document named ${file.name}. It contains quarterly financial data, revenue projections, and expense reports.`;
+  } else if (fileType === 'txt') {
+    // For text files, you can read them directly
+    const text = await file.text();
+    return text;
+  } else {
+    return `This is extracted content from ${file.name}. The document contains various information that can be queried.`;
+  }
+}
+Then update your uploadDocument function to use this new function instead of simulateTextExtraction.
+This way, your AI will respond based on the actual content of your PDF files rather than the simulated text.
+
+Note that parsing PDFs on the client side can be resource-intensive for large files. For a production application, you might want to consider:
+
+Using a server-side API for PDF parsing
+Implementing a worker thread for processing
+Adding file size limits
+Showing a proper loading state during processing
+what about text or rich text, word doc, csv, md will it parse those as well?
+
+Thought for 3 seconds
+You're right to ask about other file formats! Currently, your application only simulates text extraction for all file types. To implement actual parsing for various document types, here's how you could handle each format:
+
+Comprehensive Document Parsing Solution
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
+import Papa from 'papaparse';
+import { marked } from 'marked';
+
+async function extractTextFromFile(file: File): Promise<string> {
+  const fileType = file.name.split(".").pop()?.toLowerCase();
+  
+  try {
+    switch (fileType) {
+      case 'pdf':
+        // Parse PDF files
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const pdfData = await pdfParse(buffer);
+        return pdfData.text;
+        
+      case 'docx':
+        // Parse Word documents
+        const docxArrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({
+          arrayBuffer: docxArrayBuffer
+        });
+        return result.value;
+        
+      case 'rtf':
+        // For RTF files, you would need a specific RTF parser
+        // This is a placeholder - you'd need to implement or find an RTF parser
+        return `RTF parsing not implemented for ${file.name}. Consider converting to another format.`;
+        
+      case 'csv':
+        // Parse CSV files
+        const csvText = await file.text();
+        const csvResult = Papa.parse(csvText, { header: true });
+        // Convert CSV data to a readable string format
+        return csvResult.data
+          .map(row => Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(', '))
+          .join('\n');
+        
+      case 'md':
+        // Parse Markdown files
+        const mdText = await file.text();
+        // Optional: convert markdown to plain text by removing markdown syntax
+        const htmlContent = marked(mdText);
+        // Strip HTML tags for plain text (simple approach)
+        const plainText = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        return plainText;
+        
+      case 'txt':
+        // Text files can be read directly
+        return await file.text();
+        
+      default:
+        // For unknown file types, try to read as text
+        try {
+          return await file.text();
+        } catch (error) {
+          return `Unable to extract text from ${file.name}. Unsupported file format.`;
+        }
+    }
+  } catch (error) {
+    console.error(`Error parsing ${fileType} file:`, error);
+    return `Failed to extract content from ${file.name}. Error: ${error}`;
+  }
+}
+Required Libraries
+You'll need to install these packages:
+
+npm install pdf-parse mammoth papaparse marked
+Implementation Notes
+Text Files (.txt): These are the simplest - just use file.text() to get the content.
+Markdown Files (.md): These can be read as text and optionally processed with a markdown parser like marked to convert to plain text.
+Word Documents (.docx): Use mammoth.js to extract text from Word documents. It works well for most docx files.
+CSV Files: Use Papa Parse to convert CSV to structured data, then format it as text.
+Rich Text (.rtf): There aren't many good RTF parsers for JavaScript. You might want to suggest users convert these to another format.
+Other Formats: For formats like .xlsx (Excel), .pptx (PowerPoint), etc., you would need specific libraries for each.
+Size and Performance Considerations
+Document parsing can be resource-intensive, especially for large files. Consider:
+
+File Size Limits: Add a check like if (file.size > 10 * 1024 * 1024) return "File too large";
+Progress Indicators: Show parsing progress for large files.
+Worker Threads: For heavy processing, consider using Web Workers to avoid blocking the UI.
+Server-Side Processing: For production, consider moving parsing to the server side.
+Example Implementation in your uploadDocument Function
+export async function uploadDocument(formData: FormData) {
+  try {
+    const file = formData.get("file") as File
+
+    if (!file) {
+      return { success: false, error: "No file provided" }
+    }
+
+    // Add file size check
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      return { success: false, error: "File too large. Maximum size is 10MB." }
+    }
+
+    // Extract text using our comprehensive parser
+    const fileContent = await extractTextFromFile(file)
+
+    // Rest of your function remains the same...
+    // ...
+  } catch (error) {
+    // ...
+  }
+}
+With these changes, your application will be able to parse and extract text from a wide variety of document formats, allowing your AI to respond based on the actual content of the documents.
+what do i do with that comprehensive document parsing solution code?
+
+Thought for 1 second
+Here's how to implement the comprehensive document parsing solution in your project:
+
+Step 1: Install Required Dependencies
+
+First, install the necessary libraries for parsing different document types:
+
+npm install pdf-parse mammoth papaparse marked
+Step 2: Update Your Document Actions File
+
+Replace the simulateTextExtraction function in your app/actions/document-actions.ts file with the new parsing function:
+
+Open app/actions/document-actions.ts
+Add the imports at the top of the file:
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
+import Papa from 'papaparse';
+import { marked } from 'marked';
+Find the simulateTextExtraction function and replace it with the new extractTextFromFile function:
+// Replace this function:
+async function simulateTextExtraction(file: File): Promise<string> {
+  // ... your current code ...
+}
+
+// With this new function:
+async function extractTextFromFile(file: File): Promise<string> {
+  const fileType = file.name.split(".").pop()?.toLowerCase();
+  
+  try {
+    switch (fileType) {
+      case 'pdf':
+        // Parse PDF files
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const pdfData = await pdfParse(buffer);
+        return pdfData.text;
+        
+      case 'docx':
+        // Parse Word documents
+        const docxArrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({
+          arrayBuffer: docxArrayBuffer
+        });
+        return result.value;
+        
+      case 'rtf':
+        // For RTF files, you would need a specific RTF parser
+        // This is a placeholder - you'd need to implement or find an RTF parser
+        return `RTF parsing not implemented for ${file.name}. Consider converting to another format.`;
+        
+      case 'csv':
+        // Parse CSV files
+        const csvText = await file.text();
+        const csvResult = Papa.parse(csvText, { header: true });
+        // Convert CSV data to a readable string format
+        return csvResult.data
+          .map(row => Object.entries(row).map(([key, value]) => `${key}: ${value}`).join(', '))
+          .join('\n');
+        
+      case 'md':
+        // Parse Markdown files
+        const mdText = await file.text();
+        // Optional: convert markdown to plain text by removing markdown syntax
+        const htmlContent = marked(mdText);
+        // Strip HTML tags for plain text (simple approach)
+        const plainText = htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        return plainText;
+        
+      case 'txt':
+        // Text files can be read directly
+        return await file.text();
+        
+      default:
+        // For unknown file types, try to read as text
+        try {
+          return await file.text();
+        } catch (error) {
+          return `Unable to extract text from ${file.name}. Unsupported file format.`;
+        }
+    }
+  } catch (error) {
+    console.error(`Error parsing ${fileType} file:`, error);
+    return `Failed to extract content from ${file.name}. Error: ${error}`;
+  }
+}
+Step 3: Update the uploadDocument Function
+
+Now, update your uploadDocument function to use the new parsing function and add a file size check:
+
+export async function uploadDocument(formData: FormData) {
+  try {
+    const file = formData.get("file") as File
+
+    if (!file) {
+      return { success: false, error: "No file provided" }
+    }
+
+    // Add file size check
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      return { success: false, error: "File too large. Maximum size is 10MB." }
+    }
+
+    // Extract text using our comprehensive parser
+    // Change this line from:
+    // const fileContent = await simulateTextExtraction(file)
+    // To:
+    const fileContent = await extractTextFromFile(file)
+
+    // The rest of your function remains the same...
+    let embedding
+    try {
+      const response = await fetch(`${process.env.VERCEL_URL || "http://localhost:3000"}/api/embedding`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: fileContent }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        embedding = result.embedding
+      }
+    } catch (error) {
+      console.error("Error calling embedding API:", error)
+      // Continue without embedding if API call fails
+    }
+
+    // Store document metadata and content
+    const newDocument = {
+      id: Date.now().toString(),
+      name: file.name,
+      type: file.name.split(".").pop() || "unknown",
+      size: formatFileSize(file.size),
+      uploadedAt: "Just now",
+      content: fileContent,
+      embedding,
+    }
+
+    documents.push(newDocument)
+
+    revalidatePath("/")
+    return { success: true, document: newDocument }
+  } catch (error) {
+    console.error("Error uploading document:", error)
+    return { success: false, error: "Failed to upload document" }
+  }
+}
+Step 4: Update the Document Upload Component
+
+Finally, update your document-upload.tsx component to handle file size errors and show appropriate messages:
+
+Find the accept attribute in your file input element and update it to include all supported file types:
+<input
+  ref={fileInputRef}
+  id="file-upload"
+  type="file"
+  multiple
+  className="hidden"
+  onChange={handleFileChange}
+  accept=".pdf,.docx,.txt,.md,.csv,.rtf"
+/>
+Update the description text to reflect the supported file types:
+<p className="text-sm text-gray-400 mb-4">
+  Support for PDF, DOCX, TXT, CSV, Markdown, and other text-based documents
+</p>
+Step 5: Test Your Implementation
+
+After making these changes:
+
+Restart your development server
+Try uploading different types of documents
+Chat with the AI about the actual content of your documents
+Now your application will parse the actual content of various document types instead of using simulated text. The AI will respond based on the real content of your documents.
+
+Troubleshooting
+
+If you encounter any issues:
+
+Server-side errors: Check your server logs for parsing errors
+Large files: If parsing large files causes timeouts, consider implementing a progress indicator or chunking mechanism
+Unsupported formats: Some complex document formats might not parse correctly - consider adding more specific error messages
+Let me know if you need any clarification or run into any issues implementing these changes!
+what about this part // In a real app, you would store the file in a storage service // and extract the text content using a document parsing library // For this demo, we'll simulate text extraction const fileContent = await simulateTextExtraction(file)
+
+Thought for 2 seconds
+You're right to ask about that comment! In a production application, you'd want to:
+
+Store the original files in a storage service (not just extract the text)
+Process the files to extract text
+Optionally store the extracted text in a database
+Let me show you how to implement this more production-ready approach:
+
+Step 1: Set Up a Storage Service
+
+You have several options for file storage:
+
+Option A: Vercel Blob Storage (recommended for Vercel deployments)
+npm install @vercel/blob
+Option B: Supabase Storage
+npm install @supabase/supabase-js
+Step 2: Update Your Document Actions File
+
+Here's how to update your uploadDocument function to store files and extract text:
+
+import { put } from '@vercel/blob'; // If using Vercel Blob
+// OR
+// import { createClient } from '@supabase/supabase-js'; // If using Supabase
+
+// If using Supabase
+// const supabase = createClient(
+//   process.env.SUPABASE_URL || '',
+//   process.env.SUPABASE_ANON_KEY || ''
+// );
+
+export async function uploadDocument(formData: FormData) {
+  try {
+    const file = formData.get("file") as File
+
+    if (!file) {
+      return { success: false, error: "No file provided" }
+    }
+
+    // Add file size check
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      return { success: false, error: "File too large. Maximum size is 10MB." }
+    }
+
+    // 1. Store the original file in blob storage
+    let fileUrl = '';
+    
+    // Using Vercel Blob
+    const blob = await put(`documents/${Date.now()}-${file.name}`, file, {
+      access: 'public', // or 'private' if you want to restrict access
+    });
+    fileUrl = blob.url;
+    
+    // OR using Supabase Storage
+    // const fileBuffer = await file.arrayBuffer();
+    // const fileName = `${Date.now()}-${file.name}`;
+    // const { data, error } = await supabase.storage
+    //   .from('documents')
+    //   .upload(fileName, fileBuffer);
+    // if (error) throw error;
+    // fileUrl = supabase.storage.from('documents').getPublicUrl(fileName).data.publicUrl;
+
+    // 2. Extract text from the file
+    const fileContent = await extractTextFromFile(file);
+
+    // 3. Generate embedding using our API route
+    let embedding;
+    try {
+      const response = await fetch(`${process.env.VERCEL_URL || "http://localhost:3000"}/api/embedding`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: fileContent }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        embedding = result.embedding;
+      }
+    } catch (error) {
+      console.error("Error calling embedding API:", error);
+      // Continue without embedding if API call fails
+    }
+
+    // 4. Store document metadata, content, and file URL
+    const newDocument = {
+      id: Date.now().toString(),
+      name: file.name,
+      type: file.name.split(".").pop() || "unknown",
+      size: formatFileSize(file.size),
+      uploadedAt: "Just now",
+      content: fileContent,
+      fileUrl: fileUrl, // Store the URL to the original file
+      embedding,
+    };
+
+    documents.push(newDocument);
+
+    revalidatePath("/");
+    return { success: true, document: newDocument };
+  } catch (error) {
+    console.error("Error uploading document:", error);
+    return { success: false, error: "Failed to upload document" };
+  }
+}
+Step 3: Update Your Document Type
+
+Update your Document type in document-store.ts to include the file URL:
+
+export type Document = {
+  id: string
+  name: string
+  type: string
+  size: string
+  uploadedAt: string
+  content: string
+  fileUrl?: string // Add this field
+  embedding?: number[]
+}
+Step 4: Update Recent Documents Component
+
+Update your recent-documents.tsx component to allow downloading the original file:
+
+// In the DropdownMenuItem for Download:
+<DropdownMenuItem 
+  className="cursor-pointer"
+  onClick={() => {
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, '_blank');
+    }
+  }}
+>
+  <Download className="h-4 w-4 mr-2" />
+  Download
+</DropdownMenuItem>
+Step 5: Set Up Environment Variables
+
+If using Vercel Blob, add to your .env.local:
+
+BLOB_READ_WRITE_TOKEN=your_token_here
+If using Supabase, add:
+
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+Benefits of This Approach
+
+Original Files Are Preserved: Users can download the original documents
+Better User Experience: Users can see and access their actual files
+More Robust: You're not relying solely on text extraction
+Scalable: Works well for larger applications with many users and documents
+Considerations
+
+Storage Costs: Be aware that storing files will incur costs based on storage used and bandwidth
+Security: Consider implementing access controls for sensitive documents
+File Processing: For large files, consider using a background job or webhook for processing
+This approach is much more production-ready and provides a better user experience while still maintaining the text extraction functionality for AI interactions.

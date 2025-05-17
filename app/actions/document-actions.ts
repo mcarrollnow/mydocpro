@@ -107,7 +107,7 @@ export async function deleteDocument(docId: string, fileUrl: string) {
   }
 }
 
-export function getParsedContent(docId: string) {
+export async function getParsedContent(docId: string) {
   return parsedContentStore[docId] || null;
 }
 
